@@ -1,13 +1,17 @@
 package com.rahul.hrtips
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.ContentValues
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -18,9 +22,11 @@ import android.os.Bundle
 import android.os.Environment
 import android.util.Log
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsetsController
 import android.webkit.DownloadListener
+import android.webkit.GeolocationPermissions
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -35,20 +41,17 @@ import androidx.core.content.ContextCompat
 class MainActivity : AppCompatActivity() {
 
     private val webview: WebView by lazy{
-        findViewById<WebView>(R.id.webView)
+        findViewById(R.id.webView)
     }
     private val progressBar : ProgressBar by lazy {
         findViewById(R.id.progressBar)
     }
-    private val PERMISSION_REQUEST_CODE = 1001
+    var PERMISSION_REQUEST_CODE = 1001
     // Load a URL into the WebView
     var url = "https://www.attendance.apogeeleveller.com/login.php"
-
-    private var isLoggedIn = true // Set initial login status
     companion object {
         private const val REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION = 1
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -60,6 +63,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     fun setupWebView() {
         val settings = webview.settings
         settings.javaScriptEnabled = true
@@ -71,10 +75,18 @@ class MainActivity : AppCompatActivity() {
         settings.setSupportZoom(true)
         settings.builtInZoomControls = true
         settings.displayZoomControls = false
+        // Enable geolocation
+        settings.setGeolocationEnabled(true)
+        settings.savePassword = true
+        webview.getSettings().setSavePassword(true)
 
+
+// Set Database Path
+        webview.settings.databasePath = applicationContext.filesDir.absolutePath + "/databases"
 
         // Handle page navigation within the WebView
         webview.webViewClient = object : WebViewClient() {
+            @Deprecated("Deprecated in Java")
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                 Log.i(ContentValues.TAG, "shouldOverrideUrlLoading: url= ${url.toString()}")
                 if (url != null && url.startsWith("tel:")) {
@@ -88,16 +100,14 @@ class MainActivity : AppCompatActivity() {
                     openEmailInGmail(url)
                     return true
                 }
-                return super.shouldOverrideUrlLoading(view, url)
+                    return super.shouldOverrideUrlLoading(view, url)
             }
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-
                 // Get the dominant color of the webpage and set the status bar color
                 getDominantColor { dominantColor ->
                     setStatusBarColor(dominantColor)
                 }
-                injectLogoutScript(webview)
             }
             override fun onReceivedError(
                 view: WebView?,
@@ -124,6 +134,15 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 updateProgressBar(newProgress)
             }
+
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String?,
+                callback: GeolocationPermissions.Callback?
+            ) {
+                // Request geolocation permission from the user
+                Log.i(TAG, "onGeolocationPermissionsShowPrompt: $origin")
+                callback?.invoke(origin, true, false)
+            }
         }
 
 
@@ -137,18 +156,28 @@ class MainActivity : AppCompatActivity() {
             }
             return@setOnKeyListener false
         }
+
+        // Attach a touch listener to the WebView
+        webview.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_UP) {
+                // Get the color at the touched position
+                val color = getColorAtWebViewLocation(event.x, event.y)
+                // Set the status bar color
+                setStatusBarColor(color)
+            }
+            false
+        }
+
+
     }
 
     fun runtimePermissions(){
         val permissions = arrayOf(
-            android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.ACCESS_NETWORK_STATE,
-            android.Manifest.permission.INTERNET,
-            android.Manifest.permission.NEARBY_WIFI_DEVICES,
-            android.Manifest.permission.ACCESS_FINE_LOCATION
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_NETWORK_STATE,
+            Manifest.permission.INTERNET,
+            Manifest.permission.ACCESS_FINE_LOCATION
         )
-
         requestPermissionsIfNecessary(permissions)
     }
 
@@ -162,9 +191,8 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun requestPermissionsIfNecessary(permissions: Array<String>) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val permissionsToRequest = ArrayList<String>()
-
             // Check each permission in the array
             for (permission in permissions) {
                 if (ContextCompat.checkSelfPermission(this, permission)
@@ -174,7 +202,7 @@ class MainActivity : AppCompatActivity() {
                     permissionsToRequest.add(permission)
                 }
             }
-
+            Log.i(TAG, "requestPermissionsIfNecessary: = $permissionsToRequest")
             // Request the necessary permissions
             if (permissionsToRequest.isNotEmpty()) {
                 ActivityCompat.requestPermissions(
@@ -200,6 +228,7 @@ class MainActivity : AppCompatActivity() {
             for (i in grantResults.indices) {
                 if (grantResults[i] == PackageManager.PERMISSION_GRANTED) {
                     Log.i(ContentValues.TAG, "onRequestPermissionsResult: G= ${grantResults[i]}")
+//                    setupLocationTracking()
                     showToast("Permission granted.")
                 } else {
                     Log.i(ContentValues.TAG, "onRequestPermissionsResult: D= ${grantResults[i]}")
@@ -212,7 +241,7 @@ class MainActivity : AppCompatActivity() {
     private fun isNetworkAvailable(): Boolean {
         val connectivityManager =
             getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val networkCapabilities =
                 connectivityManager.activeNetwork ?: return false
             val actNw =
@@ -224,15 +253,6 @@ class MainActivity : AppCompatActivity() {
             return networkInfo != null && networkInfo.isConnected
         }
     }
-
-/*    override fun onBackPressed() {
-        if (webview.canGoBack()) {
-            webview.goBack()
-        } else {
-            showExitConfirmationDialog()
-//            super.onBackPressed()
-        }
-    }*/
 
     private fun updateProgressBar(progress: Int) {
         progressBar.progress = progress
@@ -251,12 +271,13 @@ class MainActivity : AppCompatActivity() {
                     "var color = window.getComputedStyle(document.body).backgroundColor;" +
                     "return color; })();"
         ) { value ->
-            val colorString = value.replace("\"", "")
-
+            Log.i(TAG, "getDominantColor: $value")
             try {
-                // Attempt to parse the color string
-                val color = Color.parseColor(colorString)
-                callback(color)
+                // this code is working
+/*                val colorString = value.replace("\"", "")
+                val color = convertRgbStringToColor(colorString)
+                callback(color)*/
+                callback(ContextCompat.getColor(this, R.color.custom))
             } catch (e: IllegalArgumentException) {
                 // Handle the case where parsing fails (unknown color)
                 callback(ContextCompat.getColor(this, R.color.custom))
@@ -265,9 +286,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setStatusBarColor(color: Int) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.statusBarColor = color
-
             // For light status bar text on dark backgrounds
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val appearance = if (isColorDark(color)) {
@@ -394,7 +414,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleBackPressed() {
-        if (webview.canGoBack() && isLoggedIn) {
+        if (webview.canGoBack()) {
             // If logged in, allow going back in WebView
             webview.goBack()
         } else {
@@ -403,32 +423,49 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Call this method when the user logs out
-    private fun onLogout() {
-        isLoggedIn = false
-    }
-
-    // Call this method when the user logs in
-    private fun onLogin() {
-        isLoggedIn = true
-    }
-
     // Override onBackPressed to handle back button press
     override fun onBackPressed() {
         handleBackPressed()
     }
 
-    private fun injectLogoutScript(webView: WebView) {
-        // Inject JavaScript to handle logout
-        val script = "javascript:(function() { " +
-                "var logoutButton = document.getElementById('your_logout_button_id'); " +
-                "if (logoutButton) { " +
-                "   logoutButton.addEventListener('click', function() { " +
-                "       // Handle logout within the WebView " +
-                "       onLogout(); " +
-                "   }); " +
-                "}})();"
+    fun convertRgbStringToColor(rgbString: String): Int {
+        // Extract the RGB values from the string
+        val regex = Regex("rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)")
+        val matchResult = regex.find(rgbString)
 
-        webView.loadUrl(script)
+        if (matchResult != null && matchResult.groupValues.size == 4) {
+            // Parse the RGB components
+            val red = matchResult.groupValues[1].toInt()
+            val green = matchResult.groupValues[2].toInt()
+            val blue = matchResult.groupValues[3].toInt()
+
+            // Create the Color value
+            return Color.rgb(red, green, blue)
+        } else {
+            // Return a default color in case of parsing failure
+            return Color.BLACK
+        }
+    }
+
+    private fun getColorAtWebViewLocation(x: Float, y: Float): Int {
+        val bitmap = createWebViewBitmap()
+        return getPixelFromBitmap(bitmap, x.toInt(), y.toInt())
+    }
+    private fun createWebViewBitmap(): Bitmap {
+        val width = webview.width
+        val height = webview.height
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        webview.draw(canvas)
+        return bitmap
+    }
+
+    private fun getPixelFromBitmap(bitmap: Bitmap, x: Int, y: Int): Int {
+        return try {
+            bitmap.getPixel(x, y)
+        } catch (e: IllegalArgumentException) {
+            // Handle the case where x or y is outside the bitmap boundaries
+            ContextCompat.getColor(this, R.color.custom)
+        }
     }
 }
