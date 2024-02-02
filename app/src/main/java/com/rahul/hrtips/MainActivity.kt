@@ -2,8 +2,10 @@ package com.rahul.hrtips
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.AlertDialog
 import android.app.DownloadManager
+import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.ContentValues.TAG
 import android.content.Context
@@ -37,6 +39,7 @@ import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import java.util.Calendar
 
 class MainActivity : AppCompatActivity() {
 
@@ -52,11 +55,14 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION = 1
     }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         runtimePermissions()
+
         if (isNetworkAvailable()) {
+            sharedPreferences()
             setupWebView()
         } else {
             showToast("No internet connection available")
@@ -79,11 +85,8 @@ class MainActivity : AppCompatActivity() {
         settings.setGeolocationEnabled(true)
         settings.savePassword = true
         webview.getSettings().setSavePassword(true)
-
-
-// Set Database Path
+        // Set Database Path
         webview.settings.databasePath = applicationContext.filesDir.absolutePath + "/databases"
-
         // Handle page navigation within the WebView
         webview.webViewClient = object : WebViewClient() {
             @Deprecated("Deprecated in Java")
@@ -100,7 +103,17 @@ class MainActivity : AppCompatActivity() {
                     openEmailInGmail(url)
                     return true
                 }
-                    return super.shouldOverrideUrlLoading(view, url)
+                else if (url?.contains("index") == true) {
+                    // Save login session, e.g., in SharedPreferences
+                    val sharedPreferences = getPreferences(Context.MODE_PRIVATE)
+                    val editor = sharedPreferences.edit()
+                    editor.putBoolean("isLoggedIn", true)
+                    editor.apply()
+                    webview.loadUrl("https://www.attendance.apogeeleveller.com/index.php")
+                    return true
+                }
+
+               return super.shouldOverrideUrlLoading(view, url)
             }
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
@@ -144,10 +157,7 @@ class MainActivity : AppCompatActivity() {
                 callback?.invoke(origin, true, false)
             }
         }
-
-
-        webview.loadUrl(url)
-
+//        webview.loadUrl(url)
         // Handle back button press
         webview.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_DOWN) {
@@ -176,7 +186,9 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_NETWORK_STATE,
             Manifest.permission.INTERNET,
-            Manifest.permission.ACCESS_FINE_LOCATION
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.SET_ALARM,
+            Manifest.permission.WAKE_LOCK
         )
         requestPermissionsIfNecessary(permissions)
     }
@@ -468,4 +480,18 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.getColor(this, R.color.custom)
         }
     }
+
+    fun sharedPreferences(){
+        val sharedPreferences = getPreferences(Context.MODE_PRIVATE)
+        val isLoggedIn = sharedPreferences.getBoolean("isLoggedIn", false)
+        if (isLoggedIn) {
+            // User is logged in, load the home page or other relevant page
+            webview.loadUrl("https://www.attendance.apogeeleveller.com/index.php")
+        } else {
+            // User is not logged in, load the login page
+            webview.loadUrl("https://www.attendance.apogeeleveller.com/login.php")
+        }
+    }
+
+
 }

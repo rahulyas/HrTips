@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "449497335278",
+    "project_id": "hr-tips-4c0a3",
+    "storage_bucket": "hr-tips-4c0a3.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:449497335278:android:4dbd35900683171c853aff",
+        "android_client_info": {
+          "package_name": "com.rahul.hrtips"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBrnJLcp52KHVOftVsq_bxaH5-t8ixDnY8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
