@@ -186,9 +186,9 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_NETWORK_STATE,
             Manifest.permission.INTERNET,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.SET_ALARM,
-            Manifest.permission.WAKE_LOCK
+            Manifest.permission.ACCESS_FINE_LOCATION
+/*            Manifest.permission.SET_ALARM,
+            Manifest.permission.WAKE_LOCK*/
         )
         requestPermissionsIfNecessary(permissions)
     }

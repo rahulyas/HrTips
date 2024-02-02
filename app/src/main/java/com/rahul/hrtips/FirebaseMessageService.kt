@@ -14,12 +14,13 @@ import com.google.firebase.messaging.RemoteMessage
 
 
 class FirebaseMessageService : FirebaseMessagingService() {
+    companion object {
+        private const val TAG = "FirebaseMsgService"
+    }
+    override fun onNewToken(token: String) {
+        super.onNewToken(token)
+    }
 
-    /*    override fun onMessageReceived(remotemsg: RemoteMessage) {
-            Log.d(TAG, "From -> " + remotemsg.getFrom())
-            Log.d(TAG, "Demo Notification Body -> " + remotemsg.getNotification()!!.getBody())
-            remotemsg.getNotification()!!.getBody()?.let { sendNotification(it) }
-        }*/
     override fun onMessageReceived(remotemsg: RemoteMessage) {
         Log.d(TAG, "From -> " + remotemsg.from)
 
@@ -46,8 +47,8 @@ class FirebaseMessageService : FirebaseMessagingService() {
         )
         val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         val notificationBuilder: NotificationCompat.Builder = NotificationCompat.Builder(this)
-            .setSmallIcon(R.mipmap.ic_launcher_foreground)
-            .setContentTitle("Android")
+            .setSmallIcon(getNotificationIcon())
+            .setContentTitle("HrTips")
             .setContentText(messageBody)
             .setAutoCancel(true)
             .setSound(soundUri)
@@ -59,7 +60,8 @@ class FirebaseMessageService : FirebaseMessagingService() {
         }
     }
 
-    companion object {
-        private const val TAG = "FirebaseMsgService"
+    fun getNotificationIcon():Int{
+        val useWhiteIcon = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        return if (useWhiteIcon) R.mipmap.ic_launcher else R.mipmap.ic_launcher_foreground
     }
 }
